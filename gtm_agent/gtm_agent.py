@@ -34,6 +34,13 @@ from . import data_service
 from .data_service import REP_IDS
 
 MODEL_NAME = "gpt-4o-mini"
+SENSITIVE_PROSPECT_FIELDS = {"billing_qualification"}
+PROSPECT_CONTACT_FIELDS = ("prospect_id", "name", "email", "disqualified")
+
+
+def _strip_sensitive_prospect_fields(record: dict) -> dict:
+    """Return a prospect record without sensitive fields."""
+    return {key: value for key, value in record.items() if key not in SENSITIVE_PROSPECT_FIELDS}
 
 # ---------------------------------------------------------------------------
 # Tools
@@ -56,9 +63,14 @@ def build_prospect_profile(prospect_id: str) -> dict:
     rec = data_service.get_prospect_record(prospect_id)
     if rec is None:
         return {"prospect_profile": None, "found": False}
+    safe_rec = _strip_sensitive_prospect_fields(rec)
     built = {
         "prospect_id": prospect_id,
-        **rec,
+        "name": safe_rec["name"],
+        "email": safe_rec["email"],
+        "annual_revenue": safe_rec["annual_revenue"],
+        "enrichment_source": safe_rec["enrichment_source"],
+        "disqualified": safe_rec["disqualified"],
         "engagement_history": data_service.fetch_engagement_history(prospect_id),
         "account_details": data_service.fetch_account_details(prospect_id),
         "tech_stack": data_service.fetch_tech_stack(prospect_id),
@@ -128,12 +140,10 @@ def get_prospect(prospect_id: str) -> dict:
     record = data_service.get_prospect_record(prospect_id)
     if record is None:
         return {"prospect": None, "found": False}
-    # Carry the contact fields through, dropping the bulky enrichment blobs the
-    # caller can pull from build_prospect_profile instead.
+    safe_record = _strip_sensitive_prospect_fields(record)
     contact = {
         "prospect_id": prospect_id,
-        **{k: v for k, v in record.items()
-           if k not in ("engagement_history", "account_details", "tech_stack")},
+        **{field: safe_record[field] for field in PROSPECT_CONTACT_FIELDS if field != "prospect_id"},
     }
     return {"prospect": contact, "found": True}
 
